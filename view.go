@@ -106,13 +106,15 @@ func (m model) renderList(width int) string {
 		numW = 3
 	}
 
-	// Divide remaining width evenly across the three data columns
-	// (Title, Date, Duration). Overhead: marker(1)+space(1)+numW+3×sep(2) = numW+8.
-	colW := (width - numW - 8) / 3
-	if colW < 10 {
-		colW = 10
+	// Date and Duration have predictable content ("2006-01-02", "H:MM:SS"),
+	// so give them compact fixed widths and let Title absorb the rest of the
+	// available space. Overhead: marker(1)+space(1)+numW+3×sep(2) = numW+8.
+	dateW := 15
+	durW := 8
+	titleW := width - numW - dateW - durW - 8
+	if titleW < 10 {
+		titleW = 10
 	}
-	titleW, dateW, durW := colW, colW, colW
 
 	var rows []string
 	// Column header (two leading spaces align with the selection marker column).
