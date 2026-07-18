@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mmcdole/gofeed"
@@ -64,6 +65,10 @@ func (m model) View() string {
 
 	row := lipgloss.JoinHorizontal(lipgloss.Top, listView, "  ", detailsView)
 	b.WriteString(row)
+	if m.playback != nil {
+		b.WriteString("\n")
+		b.WriteString(m.renderAudio(m.width - 2))
+	}
 	b.WriteString("\n\n")
 
 	// Footer / status
@@ -80,6 +85,7 @@ func (m model) View() string {
 		help := helpBoxStyle.Render(
 			"j/k or ↑/↓  move cursor\n" +
 				"h/l or ←/→  change page\n" +
+				"p           play/pause selected episode\n" +
 				"g/G         first/last page\n" +
 				"space       select episode\n" +
 				"a           select all on page\n" +
@@ -166,6 +172,29 @@ func (m model) renderList(width int) string {
 	}
 
 	return lipgloss.NewStyle().Width(width).Render(strings.Join(rows, "\n"))
+}
+
+func (m model) renderAudio(width int) string {
+	if m.playback == nil {
+		return ""
+	}
+	position := m.playback.position(time.Now())
+	state := "▶"
+	if m.playback.paused {
+		state = "Ⅱ"
+	}
+	duration := "--:--"
+	if m.playback.duration > 0 {
+		duration = formatClock(m.playback.duration)
+	}
+	content := fmt.Sprintf("%s %s  %s / %s", state, truncate(m.playback.title, width-25), formatClock(position), duration)
+	return lipgloss.NewStyle().
+		Width(width).
+		Foreground(colorSecondary).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorPrimary).
+		Padding(0, 1).
+		Render(content)
 }
 
 func (m model) renderDetails(width int) string {

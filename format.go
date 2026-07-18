@@ -4,7 +4,22 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 )
+
+func formatClock(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	seconds := int64(d / time.Second)
+	hours := seconds / 3600
+	minutes := (seconds % 3600) / 60
+	remaining := seconds % 60
+	if hours > 0 {
+		return fmt.Sprintf("%d:%02d:%02d", hours, minutes, remaining)
+	}
+	return fmt.Sprintf("%02d:%02d", minutes, remaining)
+}
 
 // stripHTML removes HTML tags from s and collapses whitespace, producing a
 // plain-text approximation suitable for terminal rendering.

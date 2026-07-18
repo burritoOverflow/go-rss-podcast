@@ -43,6 +43,10 @@ type model struct {
 	query      string
 	searching  bool
 	filtered   []int // indices into items matching query, in match order
+	audio      *audioController
+	playback   *audioPlayback
+	audioIndex int
+	audioStart bool
 }
 
 func newModel(feed *gofeed.Feed, outDir string) model {
@@ -66,6 +70,7 @@ func newModel(feed *gofeed.Feed, outDir string) model {
 		selected:   make(map[int]bool),
 		spinner:    s,
 		filtered:   filtered,
+		audio:      newAudioController(),
 	}
 }
 
@@ -88,6 +93,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.String() {
 		case "q", "ctrl+c":
+			m.closePlayback()
 			return m, tea.Quit
 
 		case "?":
@@ -112,11 +118,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 
-		case "left", "h", "p":
+		case "left", "h":
 			if m.page > 0 {
 				m.page--
 				m.cursor = 0
 			}
+
+		case "p":
+			return m.togglePlayback()
 
 		case "right", "l", "n":
 			if m.page < m.totalPages-1 {
@@ -175,6 +184,27 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setMessage(fmt.Sprintf("Downloaded %s (%.1f MB)", msg.filename, float64(msg.written)/1024/1024))
 		}
 
+	case audioStartedMsg:
+		m.audioStart = false
+		if msg.err != nil {
+			m.setMessage(fmt.Sprintf("Unable to play episode: %v", msg.err))
+		} else {
+			m.playback = msg.playback
+			m.audioIndex = msg.index
+			return m, audioTickCmd()
+		}
+
+	case audioTickMsg:
+		if m.playback == nil {
+			return m, nil
+		}
+		if !m.playback.paused && !m.playback.player.IsPlaying() {
+			m.closePlayback()
+			m.setMessage("Playback finished")
+			return m, nil
+		}
+		return m, audioTickCmd()
+
 	case spinner.TickMsg:
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
@@ -187,6 +217,54 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *model) setMessage(s string) {
 	m.message = s
 	m.msgAt = time.Now()
+}
+
+func (m *model) closePlayback() {
+	if m.playback != nil {
+		m.playback.close()
+		m.playback = nil
+	}
+	m.audioStart = false
+}
+
+// togglePlayback starts the selected episode, or pauses/resumes the current
+// player. A different selection replaces the current player.
+func (m model) togglePlayback() (tea.Model, tea.Cmd) {
+	idx := m.globalIndex()
+	if idx < 0 {
+		return m, nil
+	}
+
+	if m.playback != nil && m.audioIndex == idx {
+		if m.playback.paused {
+			m.playback.play(time.Now())
+		} else {
+			m.playback.pause(time.Now())
+		}
+		return m, nil
+	}
+
+	if m.playback != nil {
+		m.closePlayback()
+	}
+	if m.audioStart {
+		return m, nil
+	}
+	m.audioStart = true
+	return m, audioStartCmd(m.audio, m.items[idx], idx)
+}
+
+func audioStartCmd(controller *audioController, item *gofeed.Item, index int) tea.Cmd {
+	return func() tea.Msg {
+		playback, err := controller.startAudio(item)
+		return audioStartedMsg{playback: playback, index: index, err: err}
+	}
+}
+
+func audioTickCmd() tea.Cmd {
+	return tea.Tick(250*time.Millisecond, func(time.Time) tea.Msg {
+		return audioTickMsg{}
+	})
 }
 
 // updateSearchInput handles keystrokes while the search box has focus: text
