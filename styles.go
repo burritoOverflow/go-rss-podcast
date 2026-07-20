@@ -11,9 +11,11 @@ var (
 	colorDanger    = lipgloss.Color("#FF5F5F")
 	colorBg        = lipgloss.Color("#1A1A1A")
 	colorSurface   = lipgloss.Color("#252525")
+	colorText      = lipgloss.Color("#FFFFFF")
+	colorAccent    = lipgloss.Color("#FF00FF")
 
 	headerStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
+			Foreground(colorText).
 			Background(colorPrimary).
 			Bold(true).
 			Padding(0, 1)
@@ -22,14 +24,42 @@ var (
 			Foreground(colorMuted).
 			Padding(0, 1)
 
+	statsStyle = lipgloss.NewStyle().
+			Foreground(colorMuted)
+
+	searchActiveStyle = lipgloss.NewStyle().
+				Foreground(colorPrimary).
+				Bold(true)
+
+	searchFilterStyle = lipgloss.NewStyle().
+				Foreground(colorPrimary)
+
 	sectionStyle = lipgloss.NewStyle().
 			Foreground(colorSecondary).
 			Bold(true)
 
+	listHeaderStyle = lipgloss.NewStyle().
+			Foreground(colorSecondary).
+			Bold(true)
+
 	selectedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFFFF")).
+			Foreground(colorText).
 			Background(colorSurface).
 			Bold(true)
+
+	mutedTextStyle = lipgloss.NewStyle().
+			Foreground(colorMuted)
+
+	dangerTextStyle = lipgloss.NewStyle().
+			Foreground(colorDanger)
+
+	audioInfoStyle = lipgloss.NewStyle().
+			Foreground(colorSecondary)
+
+	fillWidthStyle = lipgloss.NewStyle()
+
+	spinnerStyle = lipgloss.NewStyle().
+			Foreground(colorAccent)
 
 	detailsBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).

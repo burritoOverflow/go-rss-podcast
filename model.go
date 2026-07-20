@@ -6,10 +6,10 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/mmcdole/gofeed"
 )
 
+// number of episodes shown per page in the list view
 const pageSize = 10
 
 // downloadMsg carries the result of an asynchronous episode download back to
@@ -32,23 +32,28 @@ type model struct {
 	page       int
 	totalPages int
 	cursor     int
-	selected   map[int]bool
-	width      int
-	height     int
-	message    string
-	msgAt      time.Time
-	spinner    spinner.Model
-	downloads  int
-	help       bool
-	query      string
-	searching  bool
-	filtered   []int // indices into items matching query, in match order
+	// maps the global index of an episode to whether it is selected for
+	// batch download.
+	selected map[int]bool
+	// maps the global index of an episode to whether
+	// it is currently being downloaded.
+	downloading map[int]bool
+	width       int
+	height      int
+	message     string
+	msgAt       time.Time
+	spinner     spinner.Model
+	downloads   int
+	help        bool
+	query       string
+	searching   bool
+	filtered    []int // indices into items matching query, in match order
 }
 
 func newModel(feed *gofeed.Feed, outDir string) model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF00FF"))
+	s.Style = spinnerStyle
 
 	filtered := allIndices(len(feed.Items))
 	totalPages := (len(filtered) + pageSize - 1) / pageSize
@@ -57,15 +62,16 @@ func newModel(feed *gofeed.Feed, outDir string) model {
 	}
 
 	return model{
-		feed:       feed,
-		items:      feed.Items,
-		outDir:     outDir,
-		page:       0,
-		totalPages: totalPages,
-		cursor:     0,
-		selected:   make(map[int]bool),
-		spinner:    s,
-		filtered:   filtered,
+		feed:        feed,
+		items:       feed.Items,
+		outDir:      outDir,
+		page:        0,
+		totalPages:  totalPages,
+		cursor:      0,
+		selected:    make(map[int]bool),
+		downloading: make(map[int]bool),
+		spinner:     s,
+		filtered:    filtered,
 	}
 }
 
@@ -134,7 +140,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case " ":
 			idx := m.globalIndex()
-			if idx >= 0 {
+			if idx >= 0 && !m.downloading[idx] {
 				if m.selected[idx] {
 					delete(m.selected, idx)
 				} else {
@@ -146,13 +152,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			start, end := m.pageBounds()
 			allSelected := true
 			for pos := start; pos < end; pos++ {
-				if !m.selected[m.filtered[pos]] {
+				idx := m.filtered[pos]
+				if m.downloading[idx] {
+					continue
+				}
+				if !m.selected[idx] {
 					allSelected = false
 					break
 				}
 			}
 			for pos := start; pos < end; pos++ {
 				idx := m.filtered[pos]
+				if m.downloading[idx] {
+					continue
+				}
 				if allSelected {
 					delete(m.selected, idx)
 				} else {
@@ -169,6 +182,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case downloadMsg:
 		m.downloads--
+		delete(m.downloading, msg.num-1)
 		if msg.err != nil {
 			m.setMessage(fmt.Sprintf("Failed %s: %v", msg.filename, msg.err))
 		} else {
@@ -259,30 +273,35 @@ func (m model) globalIndex() int {
 func (m model) downloadSelection() (tea.Model, tea.Cmd) {
 	if len(m.selected) == 0 {
 		idx := m.globalIndex()
-		if idx < 0 {
+		if idx < 0 || m.downloading[idx] {
 			return m, nil
 		}
 		m.downloads++
-		m.setMessage(fmt.Sprintf("Downloading episode %d...", idx+1))
+		m.downloading[idx] = true
 		return m, downloadCmd(m.items[idx], idx+1, m.outDir)
 	}
 
 	cmds := make([]tea.Cmd, 0, len(m.selected))
 	for idx := range m.selected {
 		m.downloads++
+		m.downloading[idx] = true
 		cmds = append(cmds, downloadCmd(m.items[idx], idx+1, m.outDir))
 	}
-	m.setMessage(fmt.Sprintf("Downloading %d episodes...", len(m.selected)))
+	m.selected = make(map[int]bool)
 	return m, tea.Batch(cmds...)
 }
 
 func (m model) downloadAll() (tea.Model, tea.Cmd) {
 	cmds := make([]tea.Cmd, 0, len(m.filtered))
 	for _, idx := range m.filtered {
+		if m.downloading[idx] {
+			continue
+		}
 		m.downloads++
+		m.downloading[idx] = true
+		delete(m.selected, idx)
 		cmds = append(cmds, downloadCmd(m.items[idx], idx+1, m.outDir))
 	}
-	m.setMessage(fmt.Sprintf("Downloading all %d episodes...", len(m.filtered)))
 	return m, tea.Batch(cmds...)
 }
 

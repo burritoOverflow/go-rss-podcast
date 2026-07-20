@@ -26,15 +26,15 @@ func (m model) View() string {
 	// Subheader
 	stats := fmt.Sprintf("%d/%d episodes • Page %d/%d • %d selected • %d downloading",
 		len(m.filtered), len(m.items), m.page+1, m.totalPages, len(m.selected), m.downloads)
-	b.WriteString(lipgloss.NewStyle().Foreground(colorMuted).Render(stats))
+	b.WriteString(statsStyle.Render(stats))
 	b.WriteString("\n")
 
 	// Search bar: shown while typing a query or while a filter is active.
 	if m.searching {
-		b.WriteString(lipgloss.NewStyle().Foreground(colorPrimary).Bold(true).Render(fmt.Sprintf("/%s█", m.query)))
+		b.WriteString(searchActiveStyle.Render(fmt.Sprintf("/%s█", m.query)))
 		b.WriteString("\n")
 	} else if m.query != "" {
-		b.WriteString(lipgloss.NewStyle().Foreground(colorPrimary).Render(fmt.Sprintf("/%s (press / to edit, esc to clear)", m.query)))
+		b.WriteString(searchFilterStyle.Render(fmt.Sprintf("/%s (press / to edit, esc to clear)", m.query)))
 		b.WriteString("\n")
 	}
 	b.WriteString("\n")
@@ -68,7 +68,13 @@ func (m model) View() string {
 
 	// Footer / status
 	status := m.message
-	if status == "" {
+	if m.downloads > 0 {
+		episodeWord := "episode"
+		if m.downloads != 1 {
+			episodeWord = "episodes"
+		}
+		status = fmt.Sprintf("Downloading %d %s...", m.downloads, episodeWord)
+	} else if status == "" {
 		status = "Press ? for help"
 	}
 	if m.downloads > 0 {
@@ -118,20 +124,17 @@ func (m model) renderList(width int) string {
 
 	var rows []string
 	// Column header (two leading spaces align with the selection marker column).
-	header := lipgloss.NewStyle().
-		Foreground(colorSecondary).
-		Bold(true).
-		Render(strings.Repeat(" ", 2) +
-			padRight("#", numW) + "  " +
-			padRight("Title", titleW) + "  " +
-			padRight("Date", dateW) + "  " +
-			padRight("Duration", durW))
+	header := listHeaderStyle.Render(strings.Repeat(" ", 2) +
+		padRight("#", numW) + "  " +
+		padRight("Title", titleW) + "  " +
+		padRight("Date", dateW) + "  " +
+		padRight("Duration", durW))
 	rows = append(rows, header)
 	rows = append(rows, strings.Repeat("─", width))
 
 	if len(m.filtered) == 0 {
-		rows = append(rows, lipgloss.NewStyle().Foreground(colorMuted).Render("No matching episodes"))
-		return lipgloss.NewStyle().Width(width).Render(strings.Join(rows, "\n"))
+		rows = append(rows, mutedTextStyle.Render("No matching episodes"))
+		return fillWidthStyle.Width(width).Render(strings.Join(rows, "\n"))
 	}
 
 	for pos := start; pos < end; pos++ {
@@ -148,7 +151,10 @@ func (m model) renderList(width int) string {
 		}
 
 		marker := " "
-		if m.selected[i] {
+		switch {
+		case m.downloading[i]:
+			marker = m.spinner.View()
+		case m.selected[i]:
 			marker = "✓"
 		}
 
@@ -165,7 +171,7 @@ func (m model) renderList(width int) string {
 		rows = append(rows, line)
 	}
 
-	return lipgloss.NewStyle().Width(width).Render(strings.Join(rows, "\n"))
+	return fillWidthStyle.Width(width).Render(strings.Join(rows, "\n"))
 }
 
 func (m model) renderDetails(width int) string {
@@ -191,7 +197,7 @@ func (m model) renderDetails(width int) string {
 	content := fmt.Sprintf(
 		"%s\n\n%s\n\n%s\n%s\n%s",
 		sectionStyle.Render(truncate(item.Title, width-4)),
-		lipgloss.NewStyle().Foreground(colorMuted).Render(fmt.Sprintf("Published: %s • Duration: %s", date, duration)),
+		mutedTextStyle.Render(fmt.Sprintf("Published: %s • Duration: %s", date, duration)),
 		sectionStyle.Render("Description"),
 		desc,
 		m.enclosureInfo(item),
@@ -202,7 +208,7 @@ func (m model) renderDetails(width int) string {
 
 func (m model) enclosureInfo(item *gofeed.Item) string {
 	if len(item.Enclosures) == 0 {
-		return lipgloss.NewStyle().Foreground(colorDanger).Render("No audio enclosure")
+		return dangerTextStyle.Render("No audio enclosure")
 	}
 	encl := item.Enclosures[0]
 	size := "-"
@@ -211,5 +217,5 @@ func (m model) enclosureInfo(item *gofeed.Item) string {
 			size = fmt.Sprintf("%.1f MB", float64(n)/1024/1024)
 		}
 	}
-	return lipgloss.NewStyle().Foreground(colorSecondary).Render(fmt.Sprintf("Audio: %s (%s)", encl.Type, size))
+	return audioInfoStyle.Render(fmt.Sprintf("Audio: %s (%s)", encl.Type, size))
 }
